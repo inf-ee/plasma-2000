@@ -1,0 +1,25 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Dmitrii Shaburov"
+            }
+        ],
+        "Category": "Global Themes (Plasma 6)",
+        "Description": "Windows 2000 look for Plasma 6: classic taskbar, title bars, colours, splash and Shut Down dialog. Panel layout based on Reactionary ME by Die4Ever.",
+        "Id": "io.github.inf_ee.plasma2000",
+        "Name": "Plasma 2000",
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0",
+        "Website": "https://github.com/inf-ee/plasma-2000",
+        "EnabledByDefault": true
+    },
+    "Keywords": "Desktop;Workspace;Appearance;Look and Feel;Retro;Classic;Windows 2000",
+    "X-Plasma-APIVersion": "2",
+    "X-Plasma-MainScript": "defaults",
+    "X-KPackage-Dependencies": [
+        "kns://icons.knsrc/api.kde-look.org/2330873",
+        "kns://xcursor.knsrc/api.kde-look.org/2330874"
+    ]
+}

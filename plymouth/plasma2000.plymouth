@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Plasma 2000
+Description=Windows 2000 style boot splash (Plasma 2000)
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/plasma2000
+ScriptFile=/usr/share/plymouth/themes/plasma2000/plasma2000.script

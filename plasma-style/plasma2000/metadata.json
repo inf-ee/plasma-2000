@@ -1,0 +1,22 @@
+{
+    "KPackageStructure": "Plasma/Theme",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Mark Whittaker",
+                "Email": "phobian@tutanota.com"
+            },
+            {
+                "Name": "Plasma 2000 contributors"
+            }
+        ],
+        "Category": "Plasma Theme",
+        "EnabledByDefault": true,
+        "Name": "Plasma 2000",
+        "Description": "Windows 2000 style panel, based on React Plus by Mark Whittaker",
+        "Id": "plasma2000",
+        "Version": "1.0",
+        "License": "GPL-2.0-or-later",
+        "X-KPackage-Dependencies": []
+    }
+}

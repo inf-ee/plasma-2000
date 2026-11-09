@@ -1,0 +1,403 @@
+// SPDX-FileCopyrightText: 2026 Dmitrii Shaburov
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Windows 2000 style boot splash (Plasma 2000).
+// The installer adds logo.png (the distribution's logo, from the system) and
+// icon-password.png (SE98C's 32px icon, pixel-doubled 4x); both are optional.
+// Everything is placed on a virtual 640x480 screen (like the original), scaled to
+// fit each real screen. Images are pre-rendered at 4x by tools/build.py.
+//
+// Multiple screens: Plymouth draws one shared canvas and, by default, centres
+// every display inside the largest one, so a single layout shows up cropped and
+// shifted on the others. We therefore place displays side by side
+// (Window.SetX) and build one complete set of sprites per display, laid out for
+// that display's own size.
+//
+// Displays can also change after start (firmware framebuffer -> GPU driver,
+// hotplug, scale), so layout() re-runs whenever the geometry changes.
+
+Window.SetBackgroundTopColor(1, 1, 1);
+Window.SetBackgroundBottomColor(1, 1, 1);
+
+global.K = 4;
+global.nblocks = 18;
+global.max_bullets = 23;
+global.dialog_x = 150;   // (640 - 340) / 2, in virtual units
+global.dialog_y = 140;   // over the artwork, like tools/build.py
+global.logo_cx = 261;    // logo centre inside art.png (tools/build.py LOGO_CENTRE)
+global.logo_cy = 129;
+global.logo_size = 112;
+global.logo_src = Image("logo.png");
+global.icon_src = Image("icon-password.png");   // 4x pixel-doubled, like the other images
+// release number after the name (glyph-<c>.png) and tagline position; install.sh fills these in
+global.version_n = 0;
+global.version_x = 0;
+global.version_y = 0;
+global.name_end = 0;
+// @P2K_VERSION_GLYPHS@
+
+// state shared by all screens
+global.shown_blocks = 0;
+global.dialog_visible = 0;
+global.bullet_count = 0;
+global.answer_text = "";
+global.prompt_text = "";
+global.message_text = "";
+global.nscreens = 0;
+global.signature = "";
+
+global.mode = Plymouth.GetMode();
+if (global.mode == "shutdown") {
+    global.label_file = "label-shutdown.png";
+} else if (global.mode == "reboot") {
+    global.label_file = "label-reboot.png";
+} else {
+    global.label_file = "label-boot.png";
+}
+
+// ---------- helpers ----------
+
+// Load an image and scale it from 4x assets for scale factor s
+fun Load(name, s) {
+    local.img = Image(name);
+    return local.img.Scale(Math.Int(local.img.GetWidth() * s / global.K),
+                           Math.Int(local.img.GetHeight() * s / global.K));
+}
+
+fun At(sprite, x, y, z) {
+    sprite.SetPosition(Math.Int(x), Math.Int(y), z);
+}
+
+// Text rendered large, then scaled to height h (screen px), shrunk further if wider than maxw.
+// The text plugin's font size isn't in screen pixels, so measure instead of computing.
+fun FitText(text, r, g, b, h, maxw) {
+    local.img = Image.Text(text, r, g, b, 1, "Sans 24");
+    if (!local.img) {
+        return local.img;
+    }
+    if (local.img.GetHeight() < 1) {
+        return local.img;
+    }
+    local.hh = h;
+    local.w = local.img.GetWidth() * local.hh / local.img.GetHeight();
+    if (local.w > maxw) {
+        local.hh = local.hh * maxw / local.w;
+        local.w = maxw;
+    }
+    return local.img.Scale(Math.Int(local.w) + 1, Math.Int(local.hh) + 1);
+}
+
+fun SetVisible(sprite, on) {
+    if (on) {
+        sprite.SetOpacity(1);
+    } else {
+        sprite.SetOpacity(0);
+    }
+}
+
+// Count displays and build a string describing their sizes
+fun DisplayCount() {
+    local.n = 0;
+    while (Window.GetWidth(local.n)) {
+        local.n++;
+    }
+    return local.n;
+}
+
+fun GeometrySignature() {
+    local.sig = "";
+    for (local.i = 0; Window.GetWidth(local.i); local.i++) {
+        local.sig = local.sig + Window.GetX(local.i) + "," + Window.GetY(local.i) + " " +
+                    Window.GetWidth(local.i) + "x" + Window.GetHeight(local.i) + ";";
+    }
+    return local.sig;
+}
+
+// ---------- one screen ----------
+
+fun NewScreen() {
+    local.sc.art = Sprite();
+    local.sc.wordmark = Sprite();
+    local.sc.brand = Sprite();
+    local.sc.band = Sprite();
+    local.sc.grey = Sprite();
+    local.sc.label = Sprite();
+    local.sc.footer = Sprite();
+    local.sc.frame = Sprite();
+    local.sc.dialog = Sprite();
+    local.sc.logo = Sprite();
+    local.sc.tagline = Sprite();
+    for (local.i = 0; local.i < global.version_n; local.i++) {
+        local.sc.vglyph[local.i] = Sprite();
+    }
+    local.sc.icon = Sprite();
+    local.sc.answer = Sprite();
+    local.sc.prompt = Sprite();
+    local.sc.message = Sprite();
+    for (local.i = 0; local.i < global.nblocks; local.i++) {
+        local.sc.blocks[local.i] = Sprite();
+    }
+    for (local.i = 0; local.i < global.max_bullets; local.i++) {
+        local.sc.bullets[local.i] = Sprite();
+    }
+    return local.sc;
+}
+
+fun HideScreen(sc) {
+    sc.art.SetOpacity(0); sc.wordmark.SetOpacity(0); sc.brand.SetOpacity(0);
+    sc.band.SetOpacity(0); sc.grey.SetOpacity(0); sc.label.SetOpacity(0);
+    sc.footer.SetOpacity(0); sc.frame.SetOpacity(0); sc.dialog.SetOpacity(0);
+    sc.logo.SetOpacity(0); sc.icon.SetOpacity(0); sc.tagline.SetOpacity(0);
+    for (local.i = 0; local.i < global.version_n; local.i++) {
+        sc.vglyph[local.i].SetOpacity(0);
+    }
+    sc.answer.SetOpacity(0); sc.prompt.SetOpacity(0); sc.message.SetOpacity(0);
+    for (local.i = 0; local.i < global.nblocks; local.i++) {
+        sc.blocks[local.i].SetOpacity(0);
+    }
+    for (local.i = 0; local.i < global.max_bullets; local.i++) {
+        sc.bullets[local.i].SetOpacity(0);
+    }
+}
+
+// Lay out screen `sc` inside the rectangle (sx, sy, sw, sh)
+fun LayoutScreen(sc, sx, sy, sw, sh) {
+    local.s = sh / 480;
+    if (sw / 640 < local.s) {
+        local.s = sw / 640;
+    }
+    // virtual 640x480 screen, centred horizontally, sitting on the bottom edge
+    local.ox = sx + (sw - 640 * local.s) / 2;
+    local.oy = sy + sh - 480 * local.s;
+    local.bottom = sy + sh;
+    local.cx = sx + sw / 2;
+    sc.s = local.s;
+    sc.ox = local.ox;
+    sc.oy = local.oy;
+    sc.cx = local.cx;
+
+    // top: artwork, wordmark, brand
+    sc.art.SetImage(Load("art.png", local.s));
+    At(sc.art, local.ox, local.oy + 10 * local.s, 1);
+    // the distribution's logo in the centre tile, fitted inside logo_size
+    if (global.logo_src) {
+        local.lw = global.logo_src.GetWidth();
+        local.lh = global.logo_src.GetHeight();
+        local.f = global.logo_size * local.s / local.lw;
+        if (local.lh > local.lw) {
+            local.f = global.logo_size * local.s / local.lh;
+        }
+        sc.logo.SetImage(global.logo_src.Scale(Math.Int(local.lw * local.f), Math.Int(local.lh * local.f)));
+        At(sc.logo, local.ox + global.logo_cx * local.s - sc.logo.GetImage().GetWidth() / 2,
+                    local.oy + (10 + global.logo_cy) * local.s - sc.logo.GetImage().GetHeight() / 2, 2);
+        sc.logo.SetOpacity(1);
+    }
+    sc.wordmark.SetImage(Load("wordmark.png", local.s));
+    At(sc.wordmark, local.ox, local.oy + 280 * local.s, 1);
+    // release number, baseline-aligned after the name, then the tagline under its end
+    local.vx = local.ox + global.version_x * local.s;
+    for (local.i = 0; local.i < global.version_n; local.i++) {
+        sc.vglyph[local.i].SetImage(Load("glyph-" + global.version_glyph[local.i] + ".png", local.s));
+        At(sc.vglyph[local.i], local.vx, local.oy + (280 + global.version_y) * local.s, 1);
+        sc.vglyph[local.i].SetOpacity(1);
+        local.vx = local.vx + sc.vglyph[local.i].GetImage().GetWidth();
+    }
+    if (global.version_n == 0) {
+        local.vx = local.ox + global.name_end * local.s;
+    }
+    sc.tagline.SetImage(Load("tagline.png", local.s));
+    At(sc.tagline, local.vx - sc.tagline.GetImage().GetWidth(), local.oy + (280 + 64) * local.s, 1);
+    sc.tagline.SetOpacity(1);
+    sc.brand.SetImage(Load("brand.png", local.s));
+    At(sc.brand, sx + sw - sc.brand.GetImage().GetWidth() - 20 * local.s, sy + 10 * local.s, 1);
+
+    // bottom: blue band + grey strip, full width of this screen
+    local.band_image = Image("band.png");
+    sc.band.SetImage(local.band_image.Scale(sw, Math.Int(10 * local.s)));
+    At(sc.band, sx, local.bottom - 64 * local.s, 1);
+    local.grey_image = Image("grey.png");
+    sc.grey.SetImage(local.grey_image.Scale(sw, Math.Int(54 * local.s) + 1));
+    At(sc.grey, sx, local.bottom - 54 * local.s, 1);
+
+    // status text right-aligned to the progress bar, which starts at cx - 52
+    sc.label.SetImage(Load(global.label_file, local.s));
+    At(sc.label, local.cx - 58 * local.s - sc.label.GetImage().GetWidth(), local.bottom - 46 * local.s, 2);
+    sc.footer.SetImage(Load("footer.png", local.s));
+    At(sc.footer, local.cx - sc.footer.GetImage().GetWidth() / 2, local.bottom - 24 * local.s, 2);
+
+    // progress bar
+    local.bar_x = local.cx - 52 * local.s;
+    local.bar_y = local.bottom - 43 * local.s;
+    sc.frame.SetImage(Load("progress-frame.png", local.s));
+    At(sc.frame, local.bar_x, local.bar_y, 2);
+    local.block_image = Load("progress-block.png", local.s);
+    for (local.i = 0; local.i < global.nblocks; local.i++) {
+        sc.blocks[local.i].SetImage(local.block_image);
+        At(sc.blocks[local.i], local.bar_x + (2 + local.i * 9) * local.s, local.bar_y + 2 * local.s, 3);
+    }
+
+    // password dialog and its text field (1x units match tools/build.py)
+    sc.dialog.SetImage(Load("dialog.png", local.s));
+    At(sc.dialog, local.ox + global.dialog_x * local.s, local.oy + global.dialog_y * local.s, 10);
+    if (global.icon_src) {
+        sc.icon.SetImage(global.icon_src.Scale(Math.Int(global.icon_src.GetWidth() * local.s / global.K),
+                                               Math.Int(global.icon_src.GetHeight() * local.s / global.K)));
+        At(sc.icon, local.ox + (global.dialog_x + 14) * local.s, local.oy + (global.dialog_y + 34) * local.s, 11);
+    }
+    // Plymouth's own prompt (which disk, PIN, ...) goes in the free line above the field
+    sc.prompt_x = local.ox + (global.dialog_x + 60) * local.s;
+    sc.prompt_y = local.oy + (global.dialog_y + 66) * local.s;
+    sc.field_x = local.ox + (global.dialog_x + 130 + 4) * local.s;
+    sc.field_y = local.oy + (global.dialog_y + 82) * local.s;
+    local.asterisk_image = Load("asterisk.png", local.s);
+    for (local.i = 0; local.i < global.max_bullets; local.i++) {
+        sc.bullets[local.i].SetImage(local.asterisk_image);
+        At(sc.bullets[local.i], sc.field_x + local.i * 8 * local.s, sc.field_y, 11);
+    }
+    At(sc.answer, sc.field_x, sc.field_y + 3 * local.s, 11);
+
+    // static parts visible
+    sc.art.SetOpacity(1); sc.wordmark.SetOpacity(1); sc.brand.SetOpacity(1);
+    sc.band.SetOpacity(1); sc.grey.SetOpacity(1); sc.label.SetOpacity(1);
+    sc.footer.SetOpacity(1); sc.frame.SetOpacity(1);
+}
+
+// Apply the shared state (progress, dialog, message) to screen `sc`
+fun ApplyState(sc) {
+    for (local.i = 0; local.i < global.nblocks; local.i++) {
+        SetVisible(sc.blocks[local.i], local.i < global.shown_blocks);
+    }
+    SetVisible(sc.dialog, global.dialog_visible);
+    SetVisible(sc.icon, global.dialog_visible && global.icon_src);
+    for (local.i = 0; local.i < global.max_bullets; local.i++) {
+        SetVisible(sc.bullets[local.i], global.dialog_visible && global.answer_text == "" && local.i < global.bullet_count);
+    }
+    if (global.dialog_visible && global.answer_text != "") {
+        sc.answer.SetImage(FitText(global.answer_text, 0, 0, 0, 14 * sc.s, 188 * sc.s));
+        sc.answer.SetOpacity(1);
+    } else {
+        sc.answer.SetOpacity(0);
+    }
+    if (global.dialog_visible && global.prompt_text != "") {
+        sc.prompt.SetImage(FitText(global.prompt_text, 0.25, 0.25, 0.25, 13 * sc.s, 266 * sc.s));
+        At(sc.prompt, sc.prompt_x, sc.prompt_y, 11);
+        sc.prompt.SetOpacity(1);
+    } else {
+        sc.prompt.SetOpacity(0);
+    }
+    if (global.message_text != "") {
+        sc.message.SetImage(FitText(global.message_text, 0.25, 0.25, 0.25, 14 * sc.s, 600 * sc.s));
+        At(sc.message, sc.cx - sc.message.GetImage().GetWidth() / 2, sc.oy + 385 * sc.s, 3);
+        sc.message.SetOpacity(1);
+    } else {
+        sc.message.SetOpacity(0);
+    }
+}
+
+fun ApplyStateAll() {
+    for (local.i = 0; local.i < global.nscreens; local.i++) {
+        ApplyState(global.screens[local.i]);
+    }
+}
+
+// ---------- layout of all displays ----------
+
+fun layout() {
+    local.n = DisplayCount();
+    // side by side, so no display shows another one's sprites
+    local.offset = 0;
+    for (local.i = 0; local.i < local.n; local.i++) {
+        Window.SetX(local.i, local.offset);
+        Window.SetY(local.i, 0);
+        local.offset = local.offset + Window.GetWidth(local.i);
+    }
+    for (local.i = 0; local.i < local.n; local.i++) {
+        if (!global.screens[local.i]) {
+            global.screens[local.i] = NewScreen();
+        }
+        LayoutScreen(global.screens[local.i], Window.GetX(local.i), Window.GetY(local.i),
+                     Window.GetWidth(local.i), Window.GetHeight(local.i));
+    }
+    // hide sets left over from displays that went away
+    for (local.i = local.n; global.screens[local.i]; local.i++) {
+        HideScreen(global.screens[local.i]);
+    }
+    global.nscreens = local.n;
+    global.signature = GeometrySignature();
+    ApplyStateAll();
+}
+
+layout();
+
+// Re-layout if displays changed (firmware framebuffer -> GPU driver, scale, hotplug)
+fun refresh_cb() {
+    if (GeometrySignature() != global.signature) {
+        layout();
+    }
+}
+Plymouth.SetRefreshFunction(refresh_cb);
+
+fun hotplug_cb() {
+    layout();
+}
+Plymouth.SetDisplayHotplugFunction(hotplug_cb);
+
+// ---------- progress ----------
+
+fun boot_progress_cb(time, progress) {
+    local.n = Math.Int(progress * global.nblocks);
+    if (local.n > global.nblocks) {
+        local.n = global.nblocks;
+    }
+    // never go backwards
+    if (local.n > global.shown_blocks) {
+        global.shown_blocks = local.n;
+        ApplyStateAll();
+    }
+}
+Plymouth.SetBootProgressFunction(boot_progress_cb);
+
+// ---------- password / question dialog ----------
+
+fun display_password_cb(prompt, bullets) {
+    global.dialog_visible = 1;
+    global.prompt_text = prompt;
+    global.answer_text = "";
+    global.bullet_count = bullets;
+    ApplyStateAll();
+}
+Plymouth.SetDisplayPasswordFunction(display_password_cb);
+
+fun display_question_cb(prompt, entry) {
+    global.dialog_visible = 1;
+    global.prompt_text = prompt;
+    global.answer_text = entry;
+    global.bullet_count = 0;
+    ApplyStateAll();
+}
+Plymouth.SetDisplayQuestionFunction(display_question_cb);
+
+fun display_normal_cb() {
+    global.dialog_visible = 0;
+    global.prompt_text = "";
+    global.answer_text = "";
+    global.bullet_count = 0;
+    ApplyStateAll();
+}
+Plymouth.SetDisplayNormalFunction(display_normal_cb);
+
+// ---------- messages (fsck, errors, ...) ----------
+
+fun message_cb(text) {
+    global.message_text = text;
+    ApplyStateAll();
+}
+Plymouth.SetDisplayMessageFunction(message_cb);
+
+fun hide_message_cb(text) {
+    // only hide the message that is being withdrawn
+    if (text == global.message_text || text == "") {
+        global.message_text = "";
+        ApplyStateAll();
+    }
+}
+Plymouth.SetHideMessageFunction(hide_message_cb);
