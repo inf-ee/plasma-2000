@@ -2,7 +2,7 @@
 
 A Windows 2000 look for KDE Plasma 6: classic taskbar with a raised Start
 button, grey 3D title bars and colours, and Windows 2000 style login, boot,
-lock, splash and shut down screens.
+lock, splash and shut down screens. Optional: a matching VS Code theme.
 
 <p align="center">
   <a href="screenshots/1-desktop.png"><img src="screenshots/1-desktop.png" width="32%" alt="Desktop with the Windows 2000 taskbar"></a>
@@ -65,6 +65,7 @@ Each folder can also be installed on its own with its `install.sh`:
 | `apply-settings.sh` | Windows-like behaviour (see below) | no |
 | `sddm/` | "Log On to …" login screen | yes |
 | `plymouth/` | Boot screen with progress bar and disk password dialog | yes |
+| `vscode/` | Optional (not run by `./install.sh`): VS Code theme, see below | no |
 
 ### What `apply-settings.sh` changes
 
@@ -75,6 +76,27 @@ Each folder can also be installed on its own with its `install.sh`:
 - No bouncing launch feedback (works around a KWin 6.6 bug), no wobbly windows
   or transparency.
 - Clock without date, plain `#3a6ea5` desktop.
+
+## VS Code
+
+A "Plasma 2000" colour theme for VS Code and VSCodium: grey `#d4d0c8` window
+parts, white editor, navy selections and menu highlights, yellow tooltips and
+Visual C++ 6 era syntax colours (blue keywords, green comments, maroon strings).
+
+    ./vscode/install.sh                     # theme only; pick it with Ctrl+K Ctrl+T
+    ./vscode/install.sh --native-titlebar   # also use KDE's title bar (recommended)
+
+With `--native-titlebar` the window gets the Windows 2000 title bar from KDE, with
+VS Code's grey menu bar under it. It sets `window.titleBarStyle` and
+`window.menuStyle` in your VS Code settings (a theme can't change these), and
+`vscode/uninstall.sh` puts them back. A settings file with comments is left
+untouched; the lines to add are printed instead.
+
+For square, flat panes like Windows 2000, also turn off VS Code's rounded
+"modern" layout: `"workbench.experimental.modernUI": false`.
+
+Hovering over list items (Explorer and others) shows the same navy highlight as
+menus: since VS Code 1.147, menus use the list hover colour.
 
 ## Name and logo
 
@@ -103,7 +125,7 @@ back to Plasma's defaults: Win+D, the clock's date and the task button highlight
 Panels removed by `./install.sh --layout` can't be brought back.
 
 Each folder also has its own `uninstall.sh`; `./apply-settings.sh --revert` undoes
-just the settings.
+just the settings. The VS Code theme is removed with `./vscode/uninstall.sh`.
 
 ## Troubleshooting
 

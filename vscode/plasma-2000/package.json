@@ -1,0 +1,27 @@
+{
+    "name": "plasma-2000",
+    "displayName": "Plasma 2000",
+    "description": "Windows 2000 colours for VS Code: grey 3D face, navy title bar, VC++ 6 era syntax colours. Part of Plasma 2000.",
+    "version": "1.0.0",
+    "publisher": "inf-ee",
+    "license": "GPL-3.0-or-later",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/inf-ee/plasma-2000"
+    },
+    "engines": {
+        "vscode": "^1.70.0"
+    },
+    "categories": [
+        "Themes"
+    ],
+    "contributes": {
+        "themes": [
+            {
+                "label": "Plasma 2000",
+                "uiTheme": "vs",
+                "path": "./themes/plasma-2000-color-theme.json"
+            }
+        ]
+    }
+}
